@@ -19,7 +19,7 @@ A modern, web-based API testing tool built with Laravel 12 and React 19, designe
 - **Laravel 12** - PHP framework
 - **MySQL** - Database
 - **Laravel Sanctum** - API authentication
-- 
+
 ### Frontend
 - **React 19** - UI library
 - **Inertia.js v2** - Full-stack framework
