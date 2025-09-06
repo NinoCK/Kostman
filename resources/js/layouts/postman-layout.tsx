@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import React from 'react';
 import { router, Link } from '@inertiajs/react';
 import { User } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -7,6 +8,7 @@ import CollectionsSidebar from '@/components/CollectionsSidebar';
 import HistorySidebar from '@/components/HistorySidebar';
 import EnvironmentSelector from '@/components/EnvironmentSelector';
 import SettingsModal from '@/components/SettingsModal';
+import { setLoggingOut } from '@/lib/api';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -39,6 +41,12 @@ interface ApiRequest {
     url: string;
     description?: string;
     position: number;
+    headers?: Array<{key: string; value: string; isActive: boolean}>;
+    params?: Array<{key: string; value: string; isActive: boolean}>;
+    body?: {
+        type: string;
+        content: string;
+    };
 }
 
 interface RequestHistory {
@@ -69,6 +77,9 @@ export default function PostmanLayout({ user, collections = [], environments = [
     const [activeEnvironment, setActiveEnvironment] = useState<Environment | null>(null);
 
     const handleLogout = () => {
+        // Set global flag to prevent API calls during logout
+        setLoggingOut(true);
+        
         router.post('/logout', {}, {
             forceFormData: true,
             onSuccess: () => {
@@ -76,14 +87,59 @@ export default function PostmanLayout({ user, collections = [], environments = [
             },
             onError: (errors) => {
                 console.error('Logout error:', errors);
+                // Reset the flag if logout fails
+                setLoggingOut(false);
+            },
+            onFinish: () => {
+                // Reset the flag when logout process is complete (success or failure)
+                setLoggingOut(false);
             }
         });
     };
 
-    const handleRequestSelect = (request: ApiRequest) => {
-        setSelectedRequest(request);
-        // You can emit this data to the main request builder component
-        // For now, we'll just store it in state
+    const handleRequestSelect = async (request: ApiRequest) => {
+        try {
+            // Fetch full request details including headers, params, and body
+            const response = await fetch(`/api/requests/${request.id}`, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+                credentials: 'include',
+            });
+
+            if (response.ok) {
+                const fullRequest = await response.json();
+                
+                // Transform the API response to match our interface
+                const requestWithDetails: ApiRequest = {
+                    ...request,
+                    headers: fullRequest.headers?.map((header: any) => ({
+                        key: header.key,
+                        value: header.value,
+                        isActive: true
+                    })) || [],
+                    params: fullRequest.params?.map((param: any) => ({
+                        key: param.key,
+                        value: param.value,
+                        isActive: true
+                    })) || [],
+                    body: fullRequest.body ? {
+                        type: fullRequest.body.type || 'JSON',
+                        content: fullRequest.body.content || ''
+                    } : undefined
+                };
+                
+                setSelectedRequest(requestWithDetails);
+            } else {
+                // Fallback to basic request data if fetch fails
+                setSelectedRequest(request);
+            }
+        } catch (error) {
+            console.error('Failed to fetch full request details:', error);
+            // Fallback to basic request data
+            setSelectedRequest(request);
+        }
     };
 
     const handleRequestReplay = (history: RequestHistory) => {
@@ -204,12 +260,12 @@ export default function PostmanLayout({ user, collections = [], environments = [
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="ghost" className="flex items-center gap-2">
                                         <UserIcon className="h-4 w-4" />
-                                        <span className="text-sm">{user.name}</span>
+                                        <span className="text-sm">{user?.name || 'User'}</span>
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-48">
                                     <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                                        {user.email}
+                                        {user?.email || ''}
                                     </div>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem asChild>
@@ -241,7 +297,10 @@ export default function PostmanLayout({ user, collections = [], environments = [
 
                 {/* Main Content */}
                 <main className="flex-1 overflow-hidden">
-                    {children}
+                    {React.isValidElement(children) ? 
+                        React.cloneElement(children, { selectedRequest } as any) : 
+                        children
+                    }
                 </main>
             </div>
 

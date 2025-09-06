@@ -5,22 +5,19 @@ window.axios = axios;
 
 window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
 
-// Set CSRF token
-const token = document.head.querySelector('meta[name="csrf-token"]');
-if (token) {
-    window.axios.defaults.headers.common['X-CSRF-TOKEN'] = token.content;
-} else {
-    console.error('CSRF token not found: https://laravel.com/docs/csrf#csrf-x-csrf-token');
-}
+// Initialize Sanctum CSRF cookie when the page loads for SPA authentication
+window.addEventListener('DOMContentLoaded', async () => {
+    try {
+        // Get Sanctum CSRF cookie for SPA authentication
+        await window.axios.get('/sanctum/csrf-cookie');
+    } catch (error) {
+        console.warn('Failed to initialize Sanctum CSRF cookie:', error);
+    }
+});
 
-// Handle Inertia redirects for authentication
+// Handle Inertia events for better error handling
 window.addEventListener('load', () => {
-    router.on('success', (event) => {
-        // Handle successful navigation
-    });
-
     router.on('error', (errors) => {
-        // Handle navigation errors
         console.error('Inertia navigation error:', errors);
     });
 });
