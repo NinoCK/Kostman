@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { UserInfo } from '@/components/user-info';
+import SettingsModal from '@/components/SettingsModal';
 import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 import { logout } from '@/routes';
-import { edit } from '@/routes/profile';
 import { type User } from '@/types';
 import { Link, router } from '@inertiajs/react';
 import { LogOut, Settings } from 'lucide-react';
@@ -12,11 +13,17 @@ interface UserMenuContentProps {
 }
 
 export function UserMenuContent({ user }: UserMenuContentProps) {
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
     const cleanup = useMobileNavigation();
 
     const handleLogout = () => {
         cleanup();
         router.flushAll();
+    };
+
+    const handleSettingsClick = () => {
+        setShowSettingsModal(true);
+        cleanup(); // Close mobile menu if open
     };
 
     return (
@@ -28,11 +35,9 @@ export function UserMenuContent({ user }: UserMenuContentProps) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-                <DropdownMenuItem asChild>
-                    <Link className="block w-full" href={edit()} as="button" prefetch onClick={cleanup}>
-                        <Settings className="mr-2" />
-                        Settings
-                    </Link>
+                <DropdownMenuItem onClick={handleSettingsClick} className="cursor-pointer">
+                    <Settings className="mr-2" />
+                    Settings
                 </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
@@ -42,6 +47,14 @@ export function UserMenuContent({ user }: UserMenuContentProps) {
                     Log out
                 </Link>
             </DropdownMenuItem>
+
+            {/* Settings Modal */}
+            <SettingsModal
+                isOpen={showSettingsModal}
+                onClose={() => setShowSettingsModal(false)}
+                user={user}
+                mustVerifyEmail={false} // You might want to make this dynamic
+            />
         </>
     );
 }

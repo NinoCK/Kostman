@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import CollectionsSidebar from '@/components/CollectionsSidebar';
 import HistorySidebar from '@/components/HistorySidebar';
 import EnvironmentSelector from '@/components/EnvironmentSelector';
+import SettingsModal from '@/components/SettingsModal';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -63,6 +64,7 @@ interface Environment {
 export default function PostmanLayout({ user, collections = [], environments = [], children }: PostmanLayoutProps) {
     const [showCollectionsSidebar, setShowCollectionsSidebar] = useState(true);
     const [showHistorySidebar, setShowHistorySidebar] = useState(false);
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState<ApiRequest | null>(null);
     const [activeEnvironment, setActiveEnvironment] = useState<Environment | null>(null);
 
@@ -216,11 +218,12 @@ export default function PostmanLayout({ user, collections = [], environments = [
                                             Dashboard
                                         </Link>
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem asChild>
-                                        <Link href="/settings/profile" className="cursor-pointer">
-                                            <Settings className="h-4 w-4 mr-2" />
-                                            Settings
-                                        </Link>
+                                    <DropdownMenuItem 
+                                        onClick={() => setShowSettingsModal(true)}
+                                        className="cursor-pointer"
+                                    >
+                                        <Settings className="h-4 w-4 mr-2" />
+                                        Settings
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem 
@@ -250,6 +253,14 @@ export default function PostmanLayout({ user, collections = [], environments = [
                     onRequestSave={handleRequestSave}
                 />
             )}
+
+            {/* Settings Modal */}
+            <SettingsModal
+                isOpen={showSettingsModal}
+                onClose={() => setShowSettingsModal(false)}
+                user={user}
+                mustVerifyEmail={false} // You might want to make this dynamic based on user model
+            />
         </div>
     );
 }
