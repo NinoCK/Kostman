@@ -36,13 +36,19 @@ interface Param {
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const BODY_TYPES = ['JSON', 'Form Data', 'Raw', 'Binary'];
 
+// Default headers for common API requests
+const DEFAULT_HEADERS: Header[] = [
+    { id: 'default-1', key: 'Content-Type', value: 'application/json', isActive: true },
+    { id: 'default-2', key: 'Accept', value: 'application/json', isActive: true },
+    { id: 'default-3', key: 'User-Agent', value: 'Kostman-API-Tester/1.0', isActive: true },
+    { id: 'empty-1', key: '', value: '', isActive: true }
+];
+
 export default function RequestBuilder({ initialRequest }: RequestBuilderProps) {
     const [method, setMethod] = useState(initialRequest?.method || 'GET');
     const [url, setUrl] = useState(initialRequest?.url || '');
     const [requestName, setRequestName] = useState(initialRequest?.name || '');
-    const [headers, setHeaders] = useState<Header[]>([
-        { id: '1', key: '', value: '', isActive: true }
-    ]);
+    const [headers, setHeaders] = useState<Header[]>(DEFAULT_HEADERS);
     const [params, setParams] = useState<Param[]>([
         { id: '1', key: '', value: '', isActive: true }
     ]);
@@ -50,6 +56,7 @@ export default function RequestBuilder({ initialRequest }: RequestBuilderProps) 
     const [bodyContent, setBodyContent] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [response, setResponse] = useState<any>(null);
+    const [errorDetails, setErrorDetails] = useState<any>(null);
 
     const addHeader = () => {
         const newHeader: Header = {
@@ -91,14 +98,48 @@ export default function RequestBuilder({ initialRequest }: RequestBuilderProps) 
         ));
     };
 
+    // Reset headers to defaults
+    const resetToDefaultHeaders = () => {
+        setHeaders([...DEFAULT_HEADERS]);
+    };
+
+    // Add preset header combinations
+    const addPresetHeaders = (preset: string) => {
+        const newHeaders = [...headers.filter(h => h.key && h.value)];
+        
+        switch (preset) {
+            case 'json-api':
+                newHeaders.push(
+                    { id: Date.now().toString(), key: 'Content-Type', value: 'application/json', isActive: true },
+                    { id: (Date.now() + 1).toString(), key: 'Accept', value: 'application/json', isActive: true }
+                );
+                break;
+            case 'form-data':
+                newHeaders.push(
+                    { id: Date.now().toString(), key: 'Content-Type', value: 'application/x-www-form-urlencoded', isActive: true }
+                );
+                break;
+            case 'cors':
+                newHeaders.push(
+                    { id: Date.now().toString(), key: 'Access-Control-Allow-Origin', value: '*', isActive: true },
+                    { id: (Date.now() + 1).toString(), key: 'Access-Control-Allow-Methods', value: 'GET, POST, PUT, DELETE, OPTIONS', isActive: true }
+                );
+                break;
+        }
+        
+        newHeaders.push({ id: (Date.now() + 10).toString(), key: '', value: '', isActive: true });
+        setHeaders(newHeaders);
+    };
+
     const executeRequest = async () => {
         setIsLoading(true);
+        setErrorDetails(null);
         try {
             const requestData = {
                 method,
                 url,
-                headers: headers.filter(h => h.key && h.value),
-                params: params.filter(p => p.key && p.value),
+                headers: headers.filter(h => h.key && h.value && h.isActive),
+                params: params.filter(p => p.key && p.value && p.isActive),
                 body: bodyContent ? {
                     type: bodyType.toLowerCase().replace(' ', '-'),
                     content: bodyContent
@@ -118,12 +159,73 @@ export default function RequestBuilder({ initialRequest }: RequestBuilderProps) 
 
             const result = await response.json();
             setResponse(result);
-        } catch (error) {
+            
+            if (!result.success && result.error) {
+                setErrorDetails({
+                    message: result.error,
+                    type: getErrorType(result.error),
+                    suggestions: getErrorSuggestions(result.error)
+                });
+            }
+        } catch (error: any) {
             console.error('Request failed:', error);
-            setResponse({ error: 'Request failed' });
+            const errorMessage = error.message || 'Network request failed';
+            setResponse({ 
+                success: false, 
+                error: errorMessage,
+                time: 0
+            });
+            setErrorDetails({
+                message: errorMessage,
+                type: getErrorType(errorMessage),
+                suggestions: getErrorSuggestions(errorMessage)
+            });
         } finally {
             setIsLoading(false);
         }
+    };
+
+    // Helper function to categorize error types
+    const getErrorType = (errorMessage: string): string => {
+        if (errorMessage.includes('cURL error 60') || errorMessage.includes('SSL') || errorMessage.includes('certificate')) {
+            return 'ssl';
+        } else if (errorMessage.includes('cURL error 6') || errorMessage.includes('Could not resolve host')) {
+            return 'dns';
+        } else if (errorMessage.includes('cURL error 7') || errorMessage.includes('Failed to connect')) {
+            return 'connection';
+        } else if (errorMessage.includes('timeout') || errorMessage.includes('cURL error 28')) {
+            return 'timeout';
+        } else if (errorMessage.includes('cURL error')) {
+            return 'curl';
+        }
+        return 'general';
+    };
+
+    // Helper function to provide error-specific suggestions
+    const getErrorSuggestions = (errorMessage: string): string[] => {
+        const suggestions: string[] = [];
+        
+        if (errorMessage.includes('cURL error 60') || errorMessage.includes('SSL') || errorMessage.includes('certificate')) {
+            suggestions.push('SSL certificate verification failed. This is common with self-signed certificates or local development APIs.');
+            suggestions.push('For HTTPS APIs, ensure the server has a valid SSL certificate.');
+            suggestions.push('For testing purposes, you may need to configure SSL verification settings.');
+        } else if (errorMessage.includes('cURL error 6') || errorMessage.includes('Could not resolve host')) {
+            suggestions.push('Domain name could not be resolved. Check if the URL is correct.');
+            suggestions.push('Verify your internet connection and DNS settings.');
+        } else if (errorMessage.includes('cURL error 7') || errorMessage.includes('Failed to connect')) {
+            suggestions.push('Connection to the server failed. Check if the server is running.');
+            suggestions.push('Verify the port number and protocol (HTTP/HTTPS) are correct.');
+        } else if (errorMessage.includes('timeout')) {
+            suggestions.push('Request timed out. The server may be slow or unresponsive.');
+            suggestions.push('Try increasing the timeout value or check server status.');
+        }
+        
+        if (suggestions.length === 0) {
+            suggestions.push('Check the URL format and ensure the API endpoint is accessible.');
+            suggestions.push('Verify network connectivity and try again.');
+        }
+        
+        return suggestions;
     };
 
     return (
@@ -262,10 +364,25 @@ export default function RequestBuilder({ initialRequest }: RequestBuilderProps) 
                             <Card>
                                 <CardHeader className="flex flex-row items-center justify-between">
                                     <CardTitle>Headers</CardTitle>
-                                    <Button variant="outline" size="sm" onClick={addHeader}>
-                                        <Plus className="h-4 w-4 mr-1" />
-                                        Add
-                                    </Button>
+                                    <div className="flex gap-2">
+                                        <Select onValueChange={addPresetHeaders}>
+                                            <SelectTrigger className="w-40">
+                                                <SelectValue placeholder="Add Preset" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="json-api">JSON API</SelectItem>
+                                                <SelectItem value="form-data">Form Data</SelectItem>
+                                                <SelectItem value="cors">CORS Headers</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <Button variant="outline" size="sm" onClick={resetToDefaultHeaders}>
+                                            Reset to Default
+                                        </Button>
+                                        <Button variant="outline" size="sm" onClick={addHeader}>
+                                            <Plus className="h-4 w-4 mr-1" />
+                                            Add
+                                        </Button>
+                                    </div>
                                 </CardHeader>
                                 <CardContent>
                                     <Table>
@@ -377,7 +494,7 @@ export default function RequestBuilder({ initialRequest }: RequestBuilderProps) 
                                     <div className="flex items-center gap-4 text-sm">
                                         <div className="flex items-center gap-1">
                                             <Clock className="h-3 w-3" />
-                                            {response.response.time}ms
+                                            {response.response.time || response.time}ms
                                         </div>
                                         <Badge variant={
                                             response.response.status < 300 ? 'default' :
@@ -391,6 +508,35 @@ export default function RequestBuilder({ initialRequest }: RequestBuilderProps) 
                             </div>
                         </CardHeader>
                         <CardContent>
+                            {!response.success && errorDetails && (
+                                <div className="mb-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+                                    <div className="flex items-start gap-2 mb-2">
+                                        <div className="mt-0.5">
+                                            <svg className="h-4 w-4 text-destructive" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                            </svg>
+                                        </div>
+                                        <div className="flex-1">
+                                            <h4 className="font-medium text-destructive mb-1">Request Failed</h4>
+                                            <p className="text-sm text-destructive/80 mb-3">{errorDetails.message}</p>
+                                            {errorDetails.suggestions && errorDetails.suggestions.length > 0 && (
+                                                <div>
+                                                    <h5 className="font-medium text-sm mb-2">Suggestions:</h5>
+                                                    <ul className="text-sm space-y-1">
+                                                        {errorDetails.suggestions.map((suggestion: string, index: number) => (
+                                                            <li key={index} className="flex items-start gap-2">
+                                                                <span className="text-destructive/60">•</span>
+                                                                <span>{suggestion}</span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            
                             <Tabs defaultValue="body" className="w-full">
                                 <TabsList>
                                     <TabsTrigger value="body">Body</TabsTrigger>
