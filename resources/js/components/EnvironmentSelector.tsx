@@ -58,10 +58,19 @@ export default function EnvironmentSelector({ environments: initialEnvironments 
             setLoading(true);
             setError(null);
             const data = await api.post('/api/environments', createForm);
+            
+            // Handle case where API request was cancelled
+            if (!data) return;
+            
             setEnvironments(prev => [...prev, data.environment]);
             setCreateForm({ name: '' });
             setIsCreateOpen(false);
-        } catch (error) {
+        } catch (error: any) {
+            // Don't show errors for cancelled requests
+            if (error?.message === 'API calls are disabled during logout' || error?.name === 'AbortError') {
+                return;
+            }
+            
             console.error('Failed to create environment:', error);
             setError('Failed to create environment. Please try again.');
         } finally {
@@ -71,7 +80,10 @@ export default function EnvironmentSelector({ environments: initialEnvironments 
 
     const activateEnvironment = async (environmentId: number) => {
         try {
-            await api.post(`/api/environments/${environmentId}/activate`);
+            const result = await api.post(`/api/environments/${environmentId}/activate`);
+            
+            // Handle case where API request was cancelled
+            if (!result && result !== undefined) return;
             
             // Update environments list
             setEnvironments(prev => prev.map(env => ({
@@ -86,20 +98,34 @@ export default function EnvironmentSelector({ environments: initialEnvironments 
                 setActiveEnvironment(updatedEnv);
                 onEnvironmentChange?.(updatedEnv);
             }
-        } catch (error) {
+        } catch (error: any) {
+            // Don't show errors for cancelled requests
+            if (error?.message === 'API calls are disabled during logout' || error?.name === 'AbortError') {
+                return;
+            }
+            
             console.error('Failed to activate environment:', error);
         }
     };
 
     const deleteEnvironment = async (environmentId: number) => {
         try {
-            await api.delete(`/api/environments/${environmentId}`);
+            const result = await api.delete(`/api/environments/${environmentId}`);
+            
+            // Handle case where API request was cancelled
+            if (!result && result !== undefined) return;
+            
             setEnvironments(prev => prev.filter(env => env.id !== environmentId));
             if (activeEnvironment?.id === environmentId) {
                 setActiveEnvironment(null);
                 onEnvironmentChange?.(null);
             }
-        } catch (error) {
+        } catch (error: any) {
+            // Don't show errors for cancelled requests
+            if (error?.message === 'API calls are disabled during logout' || error?.name === 'AbortError') {
+                return;
+            }
+            
             console.error('Failed to delete environment:', error);
         }
     };

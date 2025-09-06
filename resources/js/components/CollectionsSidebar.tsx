@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { router } from '@inertiajs/react';
+import { router, Link } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -58,12 +58,21 @@ interface CollectionsSidebarProps {
     collections?: Collection[];
     onRequestSelect?: (request: ApiRequest) => void;
     selectedRequestId?: number;
+    // Add these new props for flexibility
+    showCreateButton?: boolean;
+    showRequestActions?: boolean;
+    variant?: 'sidebar' | 'dashboard' | 'collections';
+    onCollectionSelect?: (collection: Collection) => void;
 }
 
 export default function CollectionsSidebar({ 
     collections: initialCollections = [], 
     onRequestSelect,
-    selectedRequestId 
+    selectedRequestId,
+    showCreateButton = true,
+    showRequestActions = true,
+    variant = 'sidebar',
+    onCollectionSelect
 }: CollectionsSidebarProps) {
     const [collections, setCollections] = useState<Collection[]>(initialCollections);
     const [expandedCollections, setExpandedCollections] = useState<Set<number>>(new Set());
@@ -76,6 +85,16 @@ export default function CollectionsSidebar({
     // Update collections when props change
     useEffect(() => {
         setCollections(initialCollections);
+        // Auto-expand collections that have root requests to make them more discoverable
+        if (initialCollections.length > 0) {
+            const collectionsWithRequests = initialCollections
+                .filter(collection => collection.root_requests && collection.root_requests.length > 0)
+                .map(collection => collection.id);
+            
+            if (collectionsWithRequests.length > 0) {
+                setExpandedCollections(new Set(collectionsWithRequests));
+            }
+        }
     }, [initialCollections]);
 
     const createCollection = async () => {
@@ -163,6 +182,199 @@ export default function CollectionsSidebar({
         }
     };
 
+    const renderCollectionItem = (collection: Collection) => {
+        if (variant === 'dashboard') {
+            return (
+                <Card key={collection.id} className="p-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <div>
+                            <h3 className="font-medium">{collection.name}</h3>
+                            <p className="text-sm text-muted-foreground">
+                                {collection.root_requests?.length || 0} requests
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {collection.is_public ? (
+                                <Globe className="h-4 w-4 text-blue-500" />
+                            ) : (
+                                <Lock className="h-4 w-4 text-muted-foreground" />
+                            )}
+                            <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => onCollectionSelect?.(collection)}
+                            >
+                                Open
+                            </Button>
+                        </div>
+                    </div>
+                    
+                    {/* Show recent requests in dashboard variant */}
+                    <div className="space-y-2">
+                        {collection.root_requests?.slice(0, 3).map((request) => (
+                            <div 
+                                key={request.id} 
+                                className="flex items-center gap-2 text-sm p-2 rounded-md hover:bg-muted/50 cursor-pointer"
+                                onClick={() => handleRequestClick(request)}
+                            >
+                                <Badge variant={getMethodBadgeVariant(request.method)} className="text-xs">
+                                    {request.method}
+                                </Badge>
+                                <span className="flex-1 truncate">{request.name}</span>
+                            </div>
+                        ))}
+                        {collection.folders?.slice(0, 2).map((folder) => (
+                            <div key={folder.id} className="ml-2">
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                                    <Folder className="h-3 w-3" />
+                                    <span>{folder.name}</span>
+                                </div>
+                                {folder.requests?.slice(0, 2).map((request) => (
+                                    <div 
+                                        key={request.id}
+                                        className="flex items-center gap-2 text-sm p-1 pl-4 rounded-md hover:bg-muted/50 cursor-pointer"
+                                        onClick={() => handleRequestClick(request)}
+                                    >
+                                        <Badge variant={getMethodBadgeVariant(request.method)} className="text-xs">
+                                            {request.method}
+                                        </Badge>
+                                        <span className="flex-1 truncate">{request.name}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        ))}
+                    </div>
+                </Card>
+            );
+        }
+
+        // Default sidebar rendering
+        return (
+            <Collapsible 
+                key={collection.id}
+                open={expandedCollections.has(collection.id)}
+                onOpenChange={() => toggleCollection(collection.id)}
+            >
+                <div className="group relative">
+                    <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 pr-8 rounded-md hover:bg-accent text-left">
+                        {expandedCollections.has(collection.id) ? (
+                            <ChevronDown className="h-3 w-3" />
+                        ) : (
+                            <ChevronRight className="h-3 w-3" />
+                        )}
+                        <FolderOpen className="h-4 w-4" />
+                        <span className="flex-1 text-sm font-medium truncate">
+                            {collection.name}
+                        </span>
+                        {collection.is_public ? (
+                            <Globe className="h-3 w-3 text-blue-500" />
+                        ) : (
+                            <Lock className="h-3 w-3 text-muted-foreground" />
+                        )}
+                    </CollapsibleTrigger>
+
+                    {showRequestActions && (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="absolute right-1 top-1 opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+                                >
+                                    <MoreVertical className="h-3 w-3" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem>
+                                    <Edit className="h-3 w-3 mr-2" />
+                                    Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem>
+                                    <Share2 className="h-3 w-3 mr-2" />
+                                    Share
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="text-destructive">
+                                    <Trash className="h-3 w-3 mr-2" />
+                                    Delete
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
+                </div>
+
+                <CollapsibleContent className="ml-2">
+                    <div className="space-y-1">
+                        {/* Root-level requests */}
+                        {collection.root_requests?.map((request) => (
+                            <div
+                                key={request.id}
+                                className={`flex items-center gap-2 p-1 pl-6 rounded-md hover:bg-accent cursor-pointer ${
+                                    selectedRequestId === request.id ? 'bg-accent' : ''
+                                }`}
+                                onClick={() => handleRequestClick(request)}
+                            >
+                                <FileText className="h-3 w-3" />
+                                <Badge 
+                                    variant={getMethodBadgeVariant(request.method)}
+                                    className="text-xs px-1 py-0"
+                                >
+                                    {request.method}
+                                </Badge>
+                                <span className="flex-1 text-xs truncate">
+                                    {request.name}
+                                </span>
+                            </div>
+                        ))}
+
+                        {/* Folders and their requests */}
+                        {collection.folders?.map((folder) => (
+                            <Collapsible
+                                key={folder.id}
+                                open={expandedFolders.has(folder.id)}
+                                onOpenChange={() => toggleFolder(folder.id)}
+                            >
+                                <CollapsibleTrigger className="flex items-center gap-2 w-full p-1 pl-4 rounded-md hover:bg-accent text-left">
+                                    {expandedFolders.has(folder.id) ? (
+                                        <ChevronDown className="h-3 w-3" />
+                                    ) : (
+                                        <ChevronRight className="h-3 w-3" />
+                                    )}
+                                    <Folder className="h-3 w-3" />
+                                    <span className="flex-1 text-xs font-medium truncate">
+                                        {folder.name}
+                                    </span>
+                                </CollapsibleTrigger>
+
+                                <CollapsibleContent className="ml-4">
+                                    {folder.requests?.map((request) => (
+                                        <div
+                                            key={request.id}
+                                            className={`flex items-center gap-2 p-1 pl-4 rounded-md hover:bg-accent cursor-pointer ${
+                                                selectedRequestId === request.id ? 'bg-accent' : ''
+                                            }`}
+                                            onClick={() => handleRequestClick(request)}
+                                        >
+                                            <FileText className="h-3 w-3" />
+                                            <Badge 
+                                                variant={getMethodBadgeVariant(request.method)}
+                                                className="text-xs px-1 py-0"
+                                            >
+                                                {request.method}
+                                            </Badge>
+                                            <span className="flex-1 text-xs truncate">
+                                                {request.name}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </CollapsibleContent>
+                            </Collapsible>
+                        ))}
+                    </div>
+                </CollapsibleContent>
+            </Collapsible>
+        );
+    };
+
     if (loading && collections.length === 0) {
         return (
             <div className="w-80 border-r bg-muted/20 p-4">
@@ -171,6 +383,31 @@ export default function CollectionsSidebar({
                     <div className="h-4 bg-muted rounded w-1/2"></div>
                     <div className="h-4 bg-muted rounded w-2/3"></div>
                 </div>
+            </div>
+        );
+    }
+
+    // Dashboard variant returns a different layout
+    if (variant === 'dashboard') {
+        return (
+            <div className="space-y-4">
+                {collections.length > 0 ? (
+                    collections.map(renderCollectionItem)
+                ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                        <Folder className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>No collections yet</p>
+                        <p className="text-sm">Create your first collection to organize your API requests</p>
+                        {showCreateButton && (
+                            <Button className="mt-4" asChild>
+                                <Link href="/collections">
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Create Collection
+                                </Link>
+                            </Button>
+                        )}
+                    </div>
+                )}
             </div>
         );
     }
@@ -256,7 +493,7 @@ export default function CollectionsSidebar({
                                     onOpenChange={() => toggleCollection(collection.id)}
                                 >
                                     <div className="group relative">
-                                        <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-accent text-left">
+                                        <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 pr-8 rounded-md hover:bg-accent text-left">
                                             {expandedCollections.has(collection.id) ? (
                                                 <ChevronDown className="h-3 w-3" />
                                             ) : (
@@ -279,6 +516,7 @@ export default function CollectionsSidebar({
                                                     variant="ghost"
                                                     size="sm"
                                                     className="absolute right-1 top-1 opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+                                                    onClick={(e) => e.stopPropagation()}
                                                 >
                                                     <MoreVertical className="h-3 w-3" />
                                                 </Button>
@@ -309,7 +547,7 @@ export default function CollectionsSidebar({
                                             {collection.root_requests?.map((request) => (
                                                 <div
                                                     key={request.id}
-                                                    className={`flex items-center gap-2 p-1 pl-4 rounded-md hover:bg-accent cursor-pointer ${
+                                                    className={`group relative flex items-center gap-2 p-1 pl-4 pr-8 rounded-md hover:bg-accent cursor-pointer ${
                                                         selectedRequestId === request.id ? 'bg-accent' : ''
                                                     }`}
                                                     onClick={() => handleRequestClick(request)}
@@ -324,8 +562,54 @@ export default function CollectionsSidebar({
                                                     <span className="flex-1 text-xs truncate">
                                                         {request.name}
                                                     </span>
+                                                    
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="absolute right-1 top-0.5 opacity-0 group-hover:opacity-100 h-5 w-5 p-0"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                <MoreVertical className="h-3 w-3" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem
+                                                                onClick={() => handleRequestClick(request)}
+                                                            >
+                                                                <Edit className="h-3 w-3 mr-2" />
+                                                                Edit
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem
+                                                                onClick={() => {
+                                                                    // TODO: Implement duplicate request
+                                                                    console.log('Duplicate request:', request.id);
+                                                                }}
+                                                            >
+                                                                <FileText className="h-3 w-3 mr-2" />
+                                                                Duplicate
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem
+                                                                onClick={() => {
+                                                                    // TODO: Implement delete request
+                                                                    console.log('Delete request:', request.id);
+                                                                }}
+                                                            >
+                                                                <Trash className="h-3 w-3 mr-2" />
+                                                                Delete
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
                                                 </div>
                                             ))}
+                                            
+                                            {/* Show empty state if no requests */}
+                                            {(!collection.root_requests || collection.root_requests.length === 0) && (
+                                                <div className="pl-4 py-2 text-xs text-muted-foreground italic">
+                                                    No requests in this collection
+                                                </div>
+                                            )}
 
                                             {/* Folders */}
                                             {collection.folders?.map((folder) => (

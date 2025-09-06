@@ -1,5 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
 import PostmanLayout from '@/layouts/postman-layout';
+import CollectionsSidebar from '@/components/CollectionsSidebar';
 import { User } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -206,49 +207,28 @@ export default function Dashboard({ user, collections = [], environments = [], s
                             <div>
                                 <CardTitle>Recent Collections</CardTitle>
                                 <CardDescription>
-                                    Your recently updated collections
+                                    Your recently updated collections and requests
                                 </CardDescription>
                             </div>
-                            <Button variant="outline" size="sm">
-                                View All
+                            <Button variant="outline" size="sm" asChild>
+                                <Link href="/collections">View All</Link>
                             </Button>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-4">
-                                {currentStats.recent_collections.length > 0 ? (
-                                    currentStats.recent_collections.map((collection) => (
-                                        <div key={collection.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50">
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-2">
-                                                    <Folder className="h-4 w-4 text-muted-foreground" />
-                                                    <span className="font-medium">{collection.name}</span>
-                                                    <Badge variant="secondary" className="text-xs">
-                                                        {collection.request_count} requests
-                                                    </Badge>
-                                                </div>
-                                                <p className="text-sm text-muted-foreground">
-                                                    Updated {formatTimeAgo(collection.updated_at)}
-                                                </p>
-                                            </div>
-                                            <Button variant="ghost" size="sm">
-                                                Open
-                                            </Button>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <div className="text-center py-8 text-muted-foreground">
-                                        <Folder className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                                        <p>No collections yet</p>
-                                        <p className="text-sm">Create your first collection to organize your API requests</p>
-                                        <Button className="mt-4" asChild>
-                                            <Link href="/api-tester">
-                                                <Plus className="h-4 w-4 mr-2" />
-                                                Start Testing
-                                            </Link>
-                                        </Button>
-                                    </div>
-                                )}
-                            </div>
+                            <CollectionsSidebar
+                                collections={(collections || []).slice(0, 5)}
+                                variant="dashboard"
+                                showCreateButton={(collections || []).length === 0}
+                                showRequestActions={false}
+                                onCollectionSelect={(collection) => {
+                                    // Navigate to collection detail or API tester
+                                    window.location.href = `/api-tester?collection=${collection.id}`;
+                                }}
+                                onRequestSelect={(request) => {
+                                    // Navigate to API tester with specific request
+                                    window.location.href = `/api-tester?request=${request.id}`;
+                                }}
+                            />
                         </CardContent>
                     </Card>
 

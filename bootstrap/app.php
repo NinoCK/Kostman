@@ -23,17 +23,21 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
-        
-        // Ensure CSRF middleware is explicitly enabled
-        $middleware->validateCsrfTokens(except: [
-            // Add any routes that should be exempt from CSRF verification
-        ]);
-        
+
         // Apply web middleware stack to API routes for session-based auth
         $middleware->api(prepend: [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // Handle CSRF token mismatch gracefully
+        $exceptions->respond(function ($response) {
+            if ($response->getStatusCode() === 419) {
+                return back()->with([
+                    'message' => 'The page expired, please try again.',
+                ]);
+            }
+
+            return $response;
+        });
     })->create();

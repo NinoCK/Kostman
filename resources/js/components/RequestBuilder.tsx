@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,14 +9,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, X, Play, Save, Copy, Clock, Database } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Plus, X, Play, Save, Copy, Clock, Database, BookOpen } from 'lucide-react';
 
 interface RequestBuilderProps {
     initialRequest?: {
         method?: string;
         url?: string;
         name?: string;
+        headers?: Array<{key: string; value: string; isActive: boolean}>;
+        params?: Array<{key: string; value: string; isActive: boolean}>;
+        body?: {
+            type: string;
+            content: string;
+        };
     };
+    collections?: Collection[];
 }
 
 interface Header {
@@ -33,8 +41,28 @@ interface Param {
     isActive: boolean;
 }
 
+interface Collection {
+    id: number;
+    name: string;
+    description?: string;
+}
+
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const BODY_TYPES = ['JSON', 'Form Data', 'Raw', 'Binary'];
+
+// HTTP method color mapping
+const getMethodColor = (method: string): string => {
+    switch (method) {
+        case 'GET': return 'text-green-600 bg-green-50 border-green-200';
+        case 'POST': return 'text-blue-600 bg-blue-50 border-blue-200';
+        case 'PUT': return 'text-orange-600 bg-orange-50 border-orange-200';
+        case 'PATCH': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+        case 'DELETE': return 'text-red-600 bg-red-50 border-red-200';
+        case 'HEAD': return 'text-purple-600 bg-purple-50 border-purple-200';
+        case 'OPTIONS': return 'text-gray-600 bg-gray-50 border-gray-200';
+        default: return 'text-gray-600 bg-gray-50 border-gray-200';
+    }
+};
 
 // Default headers for common API requests
 const DEFAULT_HEADERS: Header[] = [
@@ -44,7 +72,7 @@ const DEFAULT_HEADERS: Header[] = [
     { id: 'empty-1', key: '', value: '', isActive: true }
 ];
 
-export default function RequestBuilder({ initialRequest }: RequestBuilderProps) {
+export default function RequestBuilder({ initialRequest, collections = [] }: RequestBuilderProps) {
     const [method, setMethod] = useState(initialRequest?.method || 'GET');
     const [url, setUrl] = useState(initialRequest?.url || '');
     const [requestName, setRequestName] = useState(initialRequest?.name || '');
@@ -57,6 +85,130 @@ export default function RequestBuilder({ initialRequest }: RequestBuilderProps) 
     const [isLoading, setIsLoading] = useState(false);
     const [response, setResponse] = useState<any>(null);
     const [errorDetails, setErrorDetails] = useState<any>(null);
+    
+    // Save to Collection state
+    const [selectedCollectionId, setSelectedCollectionId] = useState<string>('');
+    const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Initialize CSRF cookie on component mount
+    useEffect(() => {
+        const initializeCSRF = async () => {
+            try {
+                await fetch('/sanctum/csrf-cookie', {
+                    credentials: 'include',
+                });
+            } catch (error) {
+                console.warn('Failed to initialize CSRF cookie:', error);
+            }
+        };
+        
+        initializeCSRF();
+    }, []);
+
+    // Auto-fill from initialRequest when it changes
+    useEffect(() => {
+        if (initialRequest) {
+            if (initialRequest.method) setMethod(initialRequest.method);
+            if (initialRequest.url) setUrl(initialRequest.url);
+            if (initialRequest.name) setRequestName(initialRequest.name);
+            
+            // Auto-fill headers
+            if (initialRequest.headers && initialRequest.headers.length > 0) {
+                const filledHeaders = [
+                    ...initialRequest.headers.map((header, index) => ({
+                        id: `filled-${index}`,
+                        key: header.key,
+                        value: header.value,
+                        isActive: header.isActive
+                    })),
+                    { id: 'empty-after-fill', key: '', value: '', isActive: true }
+                ];
+                setHeaders(filledHeaders);
+            }
+            
+            // Auto-fill params
+            if (initialRequest.params && initialRequest.params.length > 0) {
+                const filledParams = [
+                    ...initialRequest.params.map((param, index) => ({
+                        id: `filled-param-${index}`,
+                        key: param.key,
+                        value: param.value,
+                        isActive: param.isActive
+                    })),
+                    { id: 'empty-param-after-fill', key: '', value: '', isActive: true }
+                ];
+                setParams(filledParams);
+            }
+            
+            // Auto-fill body
+            if (initialRequest.body) {
+                setBodyType(initialRequest.body.type.toUpperCase());
+                setBodyContent(initialRequest.body.content);
+            }
+        }
+    }, [initialRequest]);
+
+    // Initialize collection selection when collections prop is available
+    useEffect(() => {
+        if (collections.length > 0 && !selectedCollectionId) {
+            setSelectedCollectionId(collections[0].id.toString());
+        }
+    }, [collections, selectedCollectionId]);
+
+    const saveToCollection = async () => {
+        if (!selectedCollectionId || !requestName.trim() || !url.trim()) {
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            const activeHeaders = headers.filter(h => h.key.trim() && h.isActive);
+            const activeParams = params.filter(p => p.key.trim() && p.isActive);
+
+            const requestData = {
+                collection_id: parseInt(selectedCollectionId),
+                name: requestName.trim(),
+                method,
+                url,
+                description: `Saved from API Tester at ${new Date().toLocaleString()}`,
+                headers: activeHeaders.map(h => ({
+                    key: h.key,
+                    value: h.value,
+                    is_active: h.isActive
+                })),
+                params: activeParams.map(p => ({
+                    key: p.key,
+                    value: p.value,
+                    is_active: p.isActive
+                })),
+                body: bodyContent.trim() || null
+            };
+
+            const response = await fetch('/api/requests', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+                body: JSON.stringify(requestData),
+            });
+
+            if (response.ok) {
+                setSaveDialogOpen(false);
+                // You could add a success notification here
+                console.log('Request saved successfully');
+            } else {
+                const errorData = await response.json();
+                console.error('Failed to save request:', errorData);
+            }
+        } catch (error) {
+            console.error('Error saving request:', error);
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     const addHeader = () => {
         const newHeader: Header = {
@@ -256,19 +408,16 @@ export default function RequestBuilder({ initialRequest }: RequestBuilderProps) 
                             <div className="flex gap-2">
                                 <Select value={method} onValueChange={setMethod}>
                                     <SelectTrigger className="w-32">
-                                        <SelectValue />
+                                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium border ${getMethodColor(method)}`}>
+                                            {method}
+                                        </span>
                                     </SelectTrigger>
                                     <SelectContent>
                                         {HTTP_METHODS.map((m) => (
                                             <SelectItem key={m} value={m}>
-                                                <Badge variant={
-                                                    m === 'GET' ? 'secondary' :
-                                                    m === 'POST' ? 'default' :
-                                                    m === 'PUT' ? 'outline' :
-                                                    m === 'DELETE' ? 'destructive' : 'outline'
-                                                }>
+                                                <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium border ${getMethodColor(m)}`}>
                                                     {m}
-                                                </Badge>
+                                                </span>
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -279,6 +428,61 @@ export default function RequestBuilder({ initialRequest }: RequestBuilderProps) 
                                     placeholder="https://api.example.com/users"
                                     className="flex-1"
                                 />
+                                <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button variant="outline" className="px-6" disabled={!url.trim()}>
+                                            <BookOpen className="h-4 w-4 mr-2" />
+                                            Save
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                        <DialogHeader>
+                                            <DialogTitle>Save Request to Collection</DialogTitle>
+                                            <DialogDescription>
+                                                Save this request to a collection for future use.
+                                            </DialogDescription>
+                                        </DialogHeader>
+                                        <div className="grid gap-4 py-4">
+                                            <div className="grid grid-cols-4 items-center gap-4">
+                                                <Label htmlFor="request-name" className="text-right">
+                                                    Name
+                                                </Label>
+                                                <Input
+                                                    id="request-name"
+                                                    value={requestName}
+                                                    onChange={(e) => setRequestName(e.target.value)}
+                                                    placeholder="My API Request"
+                                                    className="col-span-3"
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-4 items-center gap-4">
+                                                <Label htmlFor="collection-select" className="text-right">
+                                                    Collection
+                                                </Label>
+                                                <Select value={selectedCollectionId} onValueChange={setSelectedCollectionId}>
+                                                    <SelectTrigger className="col-span-3">
+                                                        <SelectValue placeholder="Select a collection" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {collections.map((collection) => (
+                                                            <SelectItem key={collection.id} value={collection.id.toString()}>
+                                                                {collection.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+                                        <DialogFooter>
+                                            <Button 
+                                                onClick={saveToCollection} 
+                                                disabled={!requestName.trim() || !selectedCollectionId || isSaving}
+                                            >
+                                                {isSaving ? 'Saving...' : 'Save Request'}
+                                            </Button>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
                                 <Button 
                                     onClick={executeRequest} 
                                     disabled={!url || isLoading}
@@ -543,7 +747,7 @@ export default function RequestBuilder({ initialRequest }: RequestBuilderProps) 
                                     <TabsTrigger value="headers">Headers</TabsTrigger>
                                 </TabsList>
                                 <TabsContent value="body">
-                                    <pre className="bg-muted p-4 rounded text-sm overflow-auto max-h-96">
+                                    <pre className="bg-muted p-4 rounded text-sm overflow-auto max-h-96 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
                                         {response.success ? 
                                             JSON.stringify(JSON.parse(response.response.body || '{}'), null, 2) : 
                                             response.error

@@ -6,6 +6,31 @@ axios.defaults.withCredentials = true;
 axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
 axios.defaults.headers.common['Accept'] = 'application/json';
 
+// Global flag to prevent API calls during logout
+let isLoggingOut = false;
+
+// Global abort controller for canceling requests during logout
+let globalAbortController: AbortController | null = null;
+
+// Function to set logout state
+export function setLoggingOut(loggingOut: boolean) {
+    isLoggingOut = loggingOut;
+    
+    // Cancel all pending requests when starting logout
+    if (loggingOut && globalAbortController) {
+        globalAbortController.abort('User is logging out');
+        globalAbortController = null;
+    }
+    
+    // Create new abort controller when not logging out
+    if (!loggingOut) {
+        globalAbortController = new AbortController();
+    }
+}
+
+// Initialize abort controller
+setLoggingOut(false);
+
 // Get CSRF token from meta tag
 function getCSRFToken(): string {
     const meta = document.querySelector('meta[name="csrf-token"]');
@@ -30,9 +55,19 @@ interface ApiRequestOptions {
 export async function apiRequest(endpoint: string, options: ApiRequestOptions = {}) {
     const { method = 'GET', body, headers = {} } = options;
     
+    // Prevent API calls during logout
+    if (isLoggingOut) {
+        throw new Error('API calls are disabled during logout');
+    }
+    
     try {
-        // Ensure CSRF cookie is available before making API requests
-        await axios.get('/sanctum/csrf-cookie');
+        // Only try to refresh CSRF cookie if we're not logging out
+        if (!isLoggingOut) {
+            // Ensure CSRF cookie is available before making API requests
+            await axios.get('/sanctum/csrf-cookie', {
+                signal: globalAbortController?.signal
+            });
+        }
         
         let response;
         const config = {
@@ -40,6 +75,7 @@ export async function apiRequest(endpoint: string, options: ApiRequestOptions = 
                 ...headers,
             },
             withCredentials: true,
+            signal: globalAbortController?.signal, // Add abort signal to all requests
         };
 
         switch (method) {
@@ -64,10 +100,22 @@ export async function apiRequest(endpoint: string, options: ApiRequestOptions = 
         
         return response.data;
     } catch (error: any) {
-        // Log the error but don't redirect to avoid infinite loops
-        if (error.response?.status === 401) {
-            console.warn(`Authentication failed for ${endpoint}. User may need to refresh or re-login.`);
+        // Handle abort errors silently during logout
+        if (error.name === 'AbortError' || error.message === 'User is logging out') {
+            console.log('API request cancelled during logout');
+            return null;
         }
+        
+        // Handle authentication errors
+        if (error.response?.status === 401 || error.response?.status === 419) {
+            if (isLoggingOut) {
+                console.log('Authentication error during logout (expected)');
+                return null;
+            } else {
+                console.warn(`Authentication failed for ${endpoint}. User may need to refresh or re-login.`);
+            }
+        }
+        
         console.error(`API Request failed for ${endpoint}:`, error);
         throw error;
     }
