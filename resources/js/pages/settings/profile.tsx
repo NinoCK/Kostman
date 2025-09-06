@@ -1,20 +1,28 @@
 import { Head, useForm } from '@inertiajs/react';
-import PostmanLayout from '@/layouts/postman-layout';
+import AppLayout from '@/layouts/app-layout';
+import SettingsLayout from '@/layouts/settings/layout';
 import { User } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
+import HeadingSmall from '@/components/heading-small';
+import { type BreadcrumbItem } from '@/types';
 import { 
-    Settings,
     User as UserIcon,
     Mail,
-    Shield,
     Trash2,
     CheckCircle
 } from 'lucide-react';
+import { edit } from '@/routes/profile';
+
+const breadcrumbs: BreadcrumbItem[] = [
+    {
+        title: 'Profile settings',
+        href: edit().url,
+    },
+];
 
 interface ProfileProps {
     user: User;
@@ -42,22 +50,13 @@ export default function Profile({ user, mustVerifyEmail, status }: ProfileProps)
     };
 
     return (
-        <PostmanLayout user={user}>
+        <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Profile Settings" />
             
-            <div className="p-6 space-y-6">
-                {/* Header */}
-                <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                        <Settings className="h-6 w-6" />
-                        <h1 className="text-3xl font-bold tracking-tight">Profile Settings</h1>
-                    </div>
-                    <p className="text-muted-foreground">
-                        Manage your account information and preferences
-                    </p>
-                </div>
+            <SettingsLayout>
+                <div className="space-y-6">
+                    <HeadingSmall title="Profile Information" description="Update your name and email address" />
 
-                <div className="max-w-2xl space-y-6">
                     {/* Profile Information */}
                     <Card>
                         <CardHeader>
@@ -145,48 +144,6 @@ export default function Profile({ user, mustVerifyEmail, status }: ProfileProps)
                         </Alert>
                     )}
 
-                    {/* Account Status */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Shield className="h-4 w-4" />
-                                Account Status
-                            </CardTitle>
-                            <CardDescription>
-                                Your account verification and security status
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between p-3 border rounded-lg">
-                                    <div className="flex items-center gap-3">
-                                        <Mail className="h-4 w-4 text-muted-foreground" />
-                                        <div>
-                                            <p className="font-medium">Email Verification</p>
-                                            <p className="text-sm text-muted-foreground">
-                                                {user.email_verified_at ? 'Your email is verified' : 'Please verify your email address'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <Badge variant={user.email_verified_at ? 'default' : 'secondary'}>
-                                        {user.email_verified_at ? 'Verified' : 'Unverified'}
-                                    </Badge>
-                                </div>
-
-                                <div className="flex items-center justify-between p-3 border rounded-lg">
-                                    <div className="flex items-center gap-3">
-                                        <UserIcon className="h-4 w-4 text-muted-foreground" />
-                                        <div>
-                                            <p className="font-medium">Account Type</p>
-                                            <p className="text-sm text-muted-foreground">Standard user account</p>
-                                        </div>
-                                    </div>
-                                    <Badge variant="outline">Standard</Badge>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
                     {/* Danger Zone */}
                     <Card className="border-red-200 dark:border-red-800">
                         <CardHeader>
@@ -215,7 +172,7 @@ export default function Profile({ user, mustVerifyEmail, status }: ProfileProps)
                         </CardContent>
                     </Card>
                 </div>
-            </div>
-        </PostmanLayout>
+            </SettingsLayout>
+        </AppLayout>
     );
 }

@@ -5,11 +5,17 @@ import { User } from '@/types';
 
 interface ApiTesterProps {
     user: User;
+    collections?: any[];
+    environments?: any[];
 }
 
-export default function ApiTester({ user }: ApiTesterProps) {
+export default function ApiTester({ user, collections = [], environments = [] }: ApiTesterProps) {
     return (
-        <PostmanLayout user={user}>
+        <PostmanLayout 
+            user={user}
+            collections={collections}
+            environments={environments}
+        >
             <Head title="API Tester" />
             <RequestBuilder />
         </PostmanLayout>
